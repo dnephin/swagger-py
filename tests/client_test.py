@@ -11,13 +11,11 @@ from swaggerpy.client import (
     add_param_to_req,
     SwaggerClient,
     SwaggerClientCache,
-    validate_and_add_params_to_request,
+    validate_param,
 )
 
 
 class ValidateParamTest(unittest.TestCase):
-    """Unit tests for validate_and_add_params_to_request.
-    """
 
     def test_unrequired_param_not_added_to_request_when_none(self):
         param = {
@@ -29,12 +27,13 @@ class ValidateParamTest(unittest.TestCase):
         mock_request = Mock('requests.Request', autospec=True)
 
         with patch('swaggerpy.client.add_param_to_req') as mock_add_param:
-            validate_and_add_params_to_request(param, None, mock_request, [])
+            validate_param(param, None, mock_request, [])
             assert not mock_add_param.called
 
-            validate_and_add_params_to_request(param, False, mock_request, [])
-            mock_add_param.assert_called_once_with(param, False, mock_request)
+            validate_param(param, False, mock_request, [])
+            # TODO: test some validation
 
+    # TODO: test add_param_to_req
 
 class SwaggerClientCacheTest(unittest.TestCase):
     """Test the proxy wrapper of SwaggerClient

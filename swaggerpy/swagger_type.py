@@ -245,6 +245,7 @@ def get_swagger_types(props):
     return swagger_types
 
 
+# TODO: this should be functional, not a mutable class
 class SwaggerTypeCheck(object):
     """Initialization of the class checks for the validity
     of the value to the type.

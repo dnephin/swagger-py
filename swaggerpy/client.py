@@ -185,8 +185,8 @@ class Operation(object):
 
         for param in self._json.get(u'parameters', []):
             value = kwargs.pop(param[u'name'], param.get('defaultValue'))
-            validate_and_add_params_to_request(param, value, request,
-                                               self._models)
+            value = validate_param(param, value, request, self._models)
+            add_param_to_req(param, value, request)
         if kwargs:
             raise TypeError(u"'%s' does not have parameters %r" % (
                 self._json[u'nickname'], kwargs.keys()))
@@ -460,16 +460,13 @@ def create_operation_docstring(json_):
 
 def handle_form_param(name, value, type_, request):
     if swagger_type.is_file(type_):
-        if 'files' not in request:
-            request['files'] = {}
+        request.setdefault('files', {})
         request['files'][name] = value
     elif swagger_type.is_primitive(type_):
-        if 'data' not in request:
-            request['data'] = {}
+        request.setdefault('data', {})
         request['data'][name] = value
     else:
-        raise AssertionError(
-            u"%s neither primitive nor File" % name)
+        raise AssertionError(u"%s neither primitive nor File" % name)
 
 
 def add_param_to_req(param, value, request):
@@ -492,12 +489,8 @@ def add_param_to_req(param, value, request):
         request['params'][pname] = value
     elif param_req_type == u'body':
         if not swagger_type.is_primitive(type_):
-            # If not primitive, body has to be 'dict'
-            # (or has already been converted to dict from model)
             request['headers']['content-type'] = APP_JSON
-            request['data'] = json.dumps(value)
-        else:
-            request['data'] = stringify_body(value)
+        request['data'] = stringify_body(value)
     elif param_req_type == 'form':
         handle_form_param(pname, value, type_, request)
     # TODO(#31): accept 'header', in paramType
@@ -506,7 +499,7 @@ def add_param_to_req(param, value, request):
             u"Unsupported Parameter type: %s" % param_req_type)
 
 
-def validate_and_add_params_to_request(param, value, request, models):
+def validate_param(param, value, request, models):
     """Validates if a required param is given
     And wraps 'add_param_to_req' to populate a valid request
 
@@ -544,16 +537,15 @@ def validate_and_add_params_to_request(param, value, request, models):
     # And store the refined value back
     value = SwaggerTypeCheck(pname, value, type_, models).value
 
+    # TODO: this needs to move to add_param_to_req
     # If list in path, Turn list items into comma separated values
     if isinstance(value, list) and param_req_type == 'path':
         value = u",".join(str(x) for x in value)
 
-    # Add the parameter value to the request object
-    if value is not None:
-        add_param_to_req(param, value, request)
-    else:
-        if param.get(u'required'):
-            raise TypeError(u"Missing required parameter '%s'" % pname)
+    if value is None and param.get(u'required'):
+        raise TypeError(u"Missing required parameter '%s'" % pname)
+
+    return value
 
 
 def stringify_body(value):
