@@ -516,21 +516,17 @@ def validate_param(param, value, request, models):
 
     pname = param['name']
     type_ = swagger_type.get_swagger_type(param)
-    param_req_type = param['paramType']
+    param_type = param['paramType']
 
-    if param_req_type == 'path':
-        # Parameters in path need to be primitive/array types
-        if swagger_type.is_complex(type_):
-            raise TypeError("Param %s in path can only be primitive/list" %
-                            pname)
-    elif param_req_type == 'query':
-        # Parameters in query need to be only primitive types
-        if not swagger_type.is_primitive(type_):
-            raise TypeError("Param %s in query can only be primitive" % pname)
+    # Some paramter types only support scalar and array types
+    if (param_type in ('path', 'header', 'query') and
+            swagger_type.is_complex(type_)):
+        raise TypeError("Param %s in %s can only be a scalar or list" % (
+            pname, param_type)
 
     # TODO: this needs to move to add_param_to_req, and change logic
     # Allow lists for query params even if type is primitive
-    if isinstance(value, list) and param_req_type == 'query':
+    if isinstance(value, list) and param_type == 'query':
         type_ = swagger_type.ARRAY + swagger_type.COLON + type_
 
     # Check the parameter value against its type
@@ -539,7 +535,7 @@ def validate_param(param, value, request, models):
 
     # TODO: this needs to move to add_param_to_req
     # If list in path, Turn list items into comma separated values
-    if isinstance(value, list) and param_req_type == 'path':
+    if isinstance(value, list) and param_type == 'path':
         value = u",".join(str(x) for x in value)
 
     if value is None and param.get(u'required'):
