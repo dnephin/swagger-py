@@ -177,19 +177,20 @@ class Operation(object):
     def _construct_request(self, **kwargs):
         _request_options = kwargs.pop('_request_options', {}) or {}
 
+        # TODO: return everything from a build_request method
         request = {}
         request['method'] = self._json[u'method']
         request['url'] = self._uri
         request['params'] = {}
         request['headers'] = _request_options.get('headers', {}) or {}
 
-        for param in self._json.get(u'parameters', []):
-            value = kwargs.pop(param[u'name'], param.get('defaultValue'))
-            value = validate_param(param, value, request, self._models)
+        for param in self._json.get('parameters', []):
+            value = kwargs.pop(param['name'], param.get('defaultValue'))
+            value = validate_param(param, value, self._models)
             add_param_to_req(param, value, request)
         if kwargs:
             raise TypeError(u"'%s' does not have parameters %r" % (
-                self._json[u'nickname'], kwargs.keys()))
+                self._json['nickname'], kwargs.keys()))
         return request
 
     def __call__(self, **kwargs):
@@ -469,8 +470,11 @@ def handle_form_param(name, value, type_, request):
         raise AssertionError(u"%s neither primitive nor File" % name)
 
 
+# TODO: this is effectively the same as a gluapy class
+# TODO: make this request request instead of populate it
 def add_param_to_req(param, value, request):
-    """Populates request object with the request parameters
+    """Populates request object with the request parameters by casting values
+    to the correct type.
 
     :param param: swagger spec details of a param
     :type param: dict
@@ -479,67 +483,63 @@ def add_param_to_req(param, value, request):
     """
     pname = param['name']
     type_ = swagger_type.get_swagger_type(param)
-    param_req_type = param['paramType']
+    field = param['paramType']
 
-    if param_req_type == u'path':
+    if field == 'path':
+        # TODO: this seems wrong, realted to #81
+        if isinstance(value, list):
+            value = u",".join(map(str, value))
+
         request['url'] = request['url'].replace(
             u'{%s}' % pname,
             urllib.quote(unicode(value)))
-    elif param_req_type == u'query':
+
+    elif field == 'query':
         request['params'][pname] = value
-    elif param_req_type == u'body':
+    elif field == 'body':
         if not swagger_type.is_primitive(type_):
             request['headers']['content-type'] = APP_JSON
         request['data'] = stringify_body(value)
-    elif param_req_type == 'form':
+    elif field == 'form':
         handle_form_param(pname, value, type_, request)
-    # TODO(#31): accept 'header', in paramType
+
+    # TODO (#31): accept 'header', in paramType
     else:
-        raise AssertionError(
-            u"Unsupported Parameter type: %s" % param_req_type)
+        raise AssertionError("Unsupported parameter type: %s" % field)
 
 
-def validate_param(param, value, request, models):
-    """Validates if a required param is given
-    And wraps 'add_param_to_req' to populate a valid request
+# TODO: replace with swagger_spec_validator
+def validate_param(param, value, models):
+    """Validate an api parameter againt the spec
 
     :param param: swagger spec details of a param
     :type param: dict
     :param value: value for the param given in the API call
-    :param request: request object to be populated
     :param models: models tuple containing all complex model types
     :type models: namedtuple
     """
-    # If param not given in args, and not required, just ignore.
     if not param.get('required') and value is None:
         return
 
     pname = param['name']
     type_ = swagger_type.get_swagger_type(param)
-    param_type = param['paramType']
+    field = param['paramType']
 
     # Some paramter types only support scalar and array types
-    if (param_type in ('path', 'header', 'query') and
+    if (field in ('path', 'header', 'query') and
             swagger_type.is_complex(type_)):
         raise TypeError("Param %s in %s can only be a scalar or list" % (
-            pname, param_type)
+            pname, field))
 
-    # TODO: this needs to move to add_param_to_req, and change logic
-    # Allow lists for query params even if type is primitive
-    if isinstance(value, list) and param_type == 'query':
+    # TODO: this should be handled in SwaggerTypeCheck without having to
+    # specify a custom type_. Also related to #81
+    if isinstance(value, list) and field == 'query':
         type_ = swagger_type.ARRAY + swagger_type.COLON + type_
 
-    # Check the parameter value against its type
-    # And store the refined value back
     value = SwaggerTypeCheck(pname, value, type_, models).value
 
-    # TODO: this needs to move to add_param_to_req
-    # If list in path, Turn list items into comma separated values
-    if isinstance(value, list) and param_type == 'path':
-        value = u",".join(str(x) for x in value)
-
     if value is None and param.get(u'required'):
-        raise TypeError(u"Missing required parameter '%s'" % pname)
+        raise TypeError("Missing required parameter '%s'" % pname)
 
     return value
 
@@ -547,6 +547,6 @@ def validate_param(param, value, request, models):
 def stringify_body(value):
     """Json dump the value to string if not already in string
     """
-    if not value or isinstance(value, basestring):
+    if value is None or isinstance(value, basestring):
         return value
     return json.dumps(value)

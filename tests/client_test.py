@@ -27,10 +27,10 @@ class ValidateParamTest(unittest.TestCase):
         mock_request = Mock('requests.Request', autospec=True)
 
         with patch('swaggerpy.client.add_param_to_req') as mock_add_param:
-            validate_param(param, None, mock_request, [])
+            validate_param(param, None, [])
             assert not mock_add_param.called
 
-            validate_param(param, False, mock_request, [])
+            validate_param(param, False, [])
             # TODO: test some validation
 
     # TODO: test add_param_to_req
